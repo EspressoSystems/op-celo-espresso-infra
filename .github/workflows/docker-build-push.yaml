@@ -1,5 +1,5 @@
 ---
-name: Build and Sign Containers on main push
+name: Build and Push Containers on main push
 
 on:
   push:
@@ -8,65 +8,25 @@ on:
   workflow_dispatch:
 
 jobs:
-
-  detect-files-changed:
+  build-push-proxyd:
     runs-on: ubuntu-latest
-    outputs:
-      files-changed: ${{ steps.detect-files-changed.outputs.all_changed_files }}
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - name: Detect files changed
-        id: detect-files-changed
-        uses: tj-actions/changed-files@v44
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          separator: ','
-
-  build-container-proxyd:
-    uses: celo-org/reusable-workflows/.github/workflows/docker-build.yaml@v3.1.0-rc.4
-    name: Build proxyd image container
-    needs: detect-files-changed
-    if: |
-      contains(needs.detect-files-changed.outputs.files-changed, 'proxyd') ||
-      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-push.yaml') ||
-      github.event_name == 'workflow_dispatch'
-    permissions:
-      actions: read
-      contents: write
-      pull-requests: write
-      security-events: write
-      attestations: write
-      id-token: write
-    with:
-      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/proxyd
-      tags: test
-      platforms: linux/amd64
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism-infra/providers/github-by-repos
-      service-account: optimism-infra@devopsre.iam.gserviceaccount.com
-      context: .
-      file: ./proxyd/Dockerfile
-      trivy-enabled: false
-
-  build-container-op-conductor-ops:
-    uses: celo-org/reusable-workflows/.github/workflows/docker-build.yaml@v3.1.0-rc.4
-    name: Build op-conductor-ops image container
-    needs: detect-files-changed
-    if: |
-      contains(needs.detect-files-changed.outputs.files-changed, 'op-conductor-ops') ||
-      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-push.yaml') ||
-      github.event_name == 'workflow_dispatch'
-    permissions:
-      actions: read
-      contents: write
-      pull-requests: write
-      security-events: write
-      attestations: write
-      id-token: write
-    with:
-      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/op-conductor-ops
-      tags: test
-      platforms: linux/amd64
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism-infra/providers/github-by-repos
-      service-account: optimism-infra@devopsre.iam.gserviceaccount.com
-      context: .
-      file: ./op-conductor-ops/Dockerfile
-      trivy-enabled: false
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push proxyd image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./proxyd/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/espressosystems/op-celo-espresso-infra/proxyd:espresso-tag
